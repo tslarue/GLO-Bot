@@ -1,0 +1,194 @@
+---
+author: "Therese LaRue"
+output: 
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+  pdf_document:
+    toc: yes
+---
+
+# Overview
+This file is used to prepare the raw output of GLORIA for downstream analysis. Specifically, this file takes all of the different GLORIA outputs and generates single local, global, and ROI files with descriptor information. 
+
+File inputs (for each GLORIA run, saved in 0-input_files): 
+
+* All data: local, global, and ROI
+* Tip data: local 
+* Key file (could also be the GLO-Bot run file)
+
+File outputs (saved to 1-working_files):
+
+* Key files
+* Merged files: all_roi_data-bind_tidy.csv, all_global_data_bind_tidy.csv, all_local_data_bind_tidy.csv, and tip_local_data_bind_tidy.csv
+
+# Libraries
+The following packages were loaded: `library(plyr)`, `library(tidyverse)`, and `library(openxlsx)`.
+```{r Libraries, echo=TRUE, message=FALSE, warning=FALSE}
+library(plyr)
+library(tidyverse)
+library(openxlsx)
+```
+
+# Import all of the data
+
+## Read in the keys
+```{r Data import key, echo=TRUE, message=FALSE, warning=FALSE}
+key <- read.csv("0-input_files/GWAS_key.csv", header = TRUE)
+head(key)
+
+#ecotype key contains data i curated for my accessions
+ecotype_key <- read.xlsx("0-input_files/accessions_data.xlsx", sheet = 1, startRow = 1, colNames = TRUE)
+head(ecotype_key)
+```
+
+## Read in the entire root data
+```{r Data import all, echo=TRUE, message=FALSE, warning=FALSE}
+GWA1_all_local <- read.csv("0-input_files/GWA1_all_root-data-local.csv", header = TRUE)
+GWA2_all_local <- read.csv("0-input_files/GWA2_all_root-data-local.csv", header = TRUE)
+GWA3_all_local <- read.csv("0-input_files/GWA3_all_root-data-local.csv", header = TRUE)
+GWA4_all_local <- read.csv("0-input_files/GWA4_all_root-data-local.csv", header = TRUE)
+GWA5_all_local <- read.csv("0-input_files/GWA5_all_root-data-local.csv", header = TRUE)
+GWA6_all_local <- read.csv("0-input_files/GWA6_all_root-data-local.csv", header = TRUE)
+all_local_data_bind <- rbind(GWA1_all_local, GWA2_all_local, GWA3_all_local, GWA4_all_local, GWA5_all_local, GWA6_all_local)
+head(all_local_data_bind)
+
+GWA1_all_global <- read.csv("0-input_files/GWA1_all_root-data-global.csv", header = TRUE)
+GWA2_all_global <- read.csv("0-input_files/GWA2_all_root-data-global.csv", header = TRUE)
+GWA3_all_global <- read.csv("0-input_files/GWA3_all_root-data-global.csv", header = TRUE)
+GWA4_all_global <- read.csv("0-input_files/GWA4_all_root-data-global.csv", header = TRUE)
+GWA5_all_global <- read.csv("0-input_files/GWA5_all_root-data-global.csv", header = TRUE)
+GWA6_all_global <- read.csv("0-input_files/GWA6_all_root-data-global.csv", header = TRUE)
+all_global_data_bind <- rbind(GWA1_all_global, GWA2_all_global, GWA3_all_global, GWA4_all_global, GWA5_all_global, GWA6_all_global)
+head(all_global_data_bind)
+
+GWA1_all_roi <- read.csv("0-input_files/GWA1_all_root-data-roi.csv", header = TRUE)
+GWA2_all_roi <- read.csv("0-input_files/GWA2_all_root-data-roi.csv", header = TRUE)
+GWA3_all_roi <- read.csv("0-input_files/GWA3_all_root-data-roi.csv", header = TRUE)
+GWA4_all_roi <- read.csv("0-input_files/GWA4_all_root-data-roi.csv", header = TRUE)
+GWA5_all_roi <- read.csv("0-input_files/GWA5_all_root-data-roi.csv", header = TRUE)
+GWA6_all_roi <- read.csv("0-input_files/GWA6_all_root-data-roi.csv", header = TRUE)
+all_roi_data_bind <- rbind(GWA1_all_roi, GWA2_all_roi, GWA3_all_roi, GWA4_all_roi, GWA5_all_roi, GWA6_all_roi)
+head(all_roi_data_bind)
+```
+
+## Read in the tip data
+```{r Data import tips, echo=TRUE, message=FALSE, warning=FALSE}
+GWA1_tip <- read.csv("0-input_files/GWA1_tip_root-data-local.csv", header = TRUE)
+GWA2_tip <- read.csv("0-input_files/GWA2_tip_root-data-local.csv", header = TRUE)
+GWA3_tip <- read.csv("0-input_files/GWA3_tip_root-data-local.csv", header = TRUE)
+GWA4_tip <- read.csv("0-input_files/GWA4_tip_root-data-local.csv", header = TRUE)
+GWA5_tip <- read.csv("0-input_files/GWA5_tip_root-data-local.csv", header = TRUE)
+GWA6_tip <- read.csv("0-input_files/GWA6_tip_root-data-local.csv", header = TRUE)
+tip_local_data_bind <- rbind(GWA1_tip, GWA2_tip, GWA3_tip, GWA4_tip, GWA5_tip, GWA6_tip)
+head(tip_local_data_bind)
+```
+
+## Day numbering
+```{r Day numbering, echo=TRUE, message=FALSE, warning=FALSE}
+key$accession <- substr(key$label_notes, start = 1, stop = nchar(as.character(key$label_notes))-2)
+key$line <- substr(key$label_notes, start = nchar(as.character(key$label_notes)), stop = nchar(as.character(key$label_notes)))
+
+df_dates <- data.frame(experiment_part = character(), start_date = character())
+df_dates <- rbind(df_dates, data.frame(experiment_part = "GWA1_Part1",start_date = "8/24/17 06:00"))
+df_dates <- rbind(df_dates, data.frame(experiment_part = "GWA1_Part2",start_date = "8/25/17 06:00"))
+df_dates <- rbind(df_dates, data.frame(experiment_part = "GWA2_Part1",start_date = "9/14/17 06:00"))
+df_dates <- rbind(df_dates, data.frame(experiment_part = "GWA2_Part2",start_date = "9/15/17 06:00"))
+df_dates <- rbind(df_dates, data.frame(experiment_part = "GWA3_Part1",start_date = "10/04/17 06:00"))
+df_dates <- rbind(df_dates, data.frame(experiment_part = "GWA3_Part2",start_date = "10/05/17 06:00"))
+df_dates <- rbind(df_dates, data.frame(experiment_part = "GWA4_Part1",start_date = "10/20/17 06:00"))
+df_dates <- rbind(df_dates, data.frame(experiment_part = "GWA4_Part2",start_date = "10/21/17 06:00"))
+df_dates <- rbind(df_dates, data.frame(experiment_part = "GWA5_Part1",start_date = "11/15/17 06:00"))
+df_dates <- rbind(df_dates, data.frame(experiment_part = "GWA5_Part2",start_date = "11/16/17 06:00"))
+df_dates <- rbind(df_dates, data.frame(experiment_part = "GWA6_Part1",start_date = "12/12/17 06:00"))
+df_dates <- rbind(df_dates, data.frame(experiment_part = "GWA6_Part2",start_date = "12/13/17 06:00"))
+df_dates$start_date <- as.POSIXct(df_dates$start_date, format = "%m/%d/%y %H:%M")
+
+df_dates_final <- data.frame(image = all_global_data_bind$image)
+df_dates_final$barcode <- substr(as.character(df_dates_final$image), start = 1, stop = 9)
+df_dates_final$experiment <- substr(as.character(df_dates_final$image), start = 1, stop = 4)
+df_dates_final$rhiz_num <- substr(as.character(df_dates_final$image), start = 6, stop = 9)
+df_dates_final$full_date <- as.POSIXct(substr(as.character(df_dates_final$image), start = 11, stop = 25), format = "%Y-%m-%d-%H%M")
+df_dates_final$date <- as.POSIXct(substr(as.character(df_dates_final$image), start = 11, stop = 21), format = "%Y-%m-%d")
+df_dates_final$plaintime <- substr(as.character(df_dates_final$image), start = 22, stop = 25)
+df_dates_final$time <- as.POSIXct(substr(as.character(df_dates_final$image), start = 22, stop = 25), format = "%H%M") 
+
+key$barcode <- as.character(key$barcode)
+df_dates_final <- left_join(df_dates_final, key[c("barcode", "label_notes", "other_notes", 
+                                                  "experiment_part", "accession", "line")], by = "barcode")
+df_dates_final <- left_join(df_dates_final, df_dates, by = "experiment_part")
+df_dates_final$hours <- df_dates_final$full_date - df_dates_final$start_date
+df_dates_final$approxday <- (df_dates_final$hours/24)+14 #approximate the imaging day which started 14 days after sowing
+df_dates_final$day <- as.factor(trunc(df_dates_final$approxday))
+df_dates_final$id <- paste(df_dates_final$barcode, df_dates_final$day, sep = "-")
+```
+
+# Establish the keys
+```{r Establish a key, echo=TRUE, message=FALSE, warning=FALSE}
+ecotype_key[ecotype_key=="n.d."] <- NA
+head(ecotype_key)
+
+new_key <- df_dates_final %>% 
+  select(image, barcode, experiment, rhiz_num, full_date, label_notes, other_notes, 
+         experiment_part, accession, line, hours, day, id)
+new_key$image_tip <- gsub("invert", "tip", new_key$image)
+new_key <- left_join(new_key, ecotype_key %>% select(rhiz_num, ecotype_id_1001, ecotype_id_GWAPP, ecotype_id_busch), by = "rhiz_num")
+
+new_key$ecotypeid <- new_key$ecotype_id_1001
+new_key$ecotypeid[is.na(new_key$ecotypeid)] <- new_key$ecotype_id_GWAPP[is.na(new_key$ecotypeid)]
+new_key$ecotypeid[is.na(new_key$ecotypeid)] <- new_key$ecotype_id_busch[is.na(new_key$ecotypeid)]
+
+head(new_key)
+```
+
+# Add in keys, format, and write files
+
+## Keys
+```{r Keys, echo=TRUE, message=FALSE, warning=FALSE}
+dir.create("1-working_files")
+write.csv(new_key,'1-working_files/new_key.csv', row.names=FALSE)
+write.csv(ecotype_key,'1-working_files/ecotype_key.csv', row.names=FALSE)
+```
+
+## All ROI
+```{r Write all ROI, echo=TRUE, message=FALSE, warning=FALSE}
+all_roi_data_bind_tidy <- left_join(all_roi_data_bind, new_key, by = "image")
+write.csv(all_roi_data_bind_tidy,'1-working_files/all_roi_data_bind_tidy.csv', row.names=FALSE)
+```
+
+## All global
+```{r Write all global, echo=TRUE, message=FALSE, warning=FALSE}
+all_global_data_bind_tidy <- left_join(all_global_data_bind, new_key, by = "image")
+write.csv(all_global_data_bind_tidy,'1-working_files/all_global_data_bind_tidy.csv', row.names=FALSE)
+```
+
+## All local
+Since GLORIA outputs the angles relative to gravity from 0 to 180, this re-calculates the angles from 0 to 90, where 0 is straight down and 90 is straight out to the side. 
+```{r Write all local, echo=TRUE, message=FALSE, warning=FALSE}
+all_local_data_bind_tidy <- left_join(all_local_data_bind, new_key, by = "image")
+all_local_data_bind_tidy$start_x <- ifelse(all_local_data_bind_tidy$angle < 90, #pointing left
+                           (all_local_data_bind_tidy$x + (all_local_data_bind_tidy$length)*sin(abs(all_local_data_bind_tidy$angle-90)*(pi/180))),
+                           all_local_data_bind_tidy$x)
+all_local_data_bind_tidy$start_y <- all_local_data_bind_tidy$y
+all_local_data_bind_tidy$end_x <- ifelse(all_local_data_bind_tidy$angle > 90, #pointing right 
+                         (all_local_data_bind_tidy$x + (all_local_data_bind_tidy$length)*(sin(abs(all_local_data_bind_tidy$angle-90)*(pi/180)))), 
+                         all_local_data_bind_tidy$x)
+all_local_data_bind_tidy$end_y <- all_local_data_bind_tidy$y + abs((all_local_data_bind_tidy$length)*(cos(abs(all_local_data_bind_tidy$angle-90)*(pi/180))))
+write.csv(all_local_data_bind_tidy,'1-working_files/all_local_data_bind_tidy.csv', row.names=FALSE)
+```
+
+## Tip local
+```{r Write tip local, echo=TRUE, message=FALSE, warning=FALSE}
+tip_local_data_bind$image <- as.character(tip_local_data_bind$image)
+tip_local_data_bind_tidy <- left_join(tip_local_data_bind, new_key, by = c("image"="image_tip"))
+tip_local_data_bind_tidy$start_x <- ifelse(tip_local_data_bind_tidy$angle < 90, #pointing left
+                           (tip_local_data_bind_tidy$x + (tip_local_data_bind_tidy$length)*sin(abs(tip_local_data_bind_tidy$angle-90)*(pi/180))),
+                           tip_local_data_bind_tidy$x)
+tip_local_data_bind_tidy$start_y <- tip_local_data_bind_tidy$y
+tip_local_data_bind_tidy$end_x <- ifelse(tip_local_data_bind_tidy$angle > 90, #pointing right 
+                         (tip_local_data_bind_tidy$x + (tip_local_data_bind_tidy$length)*(sin(abs(tip_local_data_bind_tidy$angle-90)*(pi/180)))), 
+                         tip_local_data_bind_tidy$x)
+tip_local_data_bind_tidy$end_y <- tip_local_data_bind_tidy$y + abs((tip_local_data_bind_tidy$length)*(cos(abs(tip_local_data_bind_tidy$angle-90)*(pi/180))))
+write.csv(tip_local_data_bind_tidy,'1-working_files/tip_local_data_bind_tidy.csv', row.names=FALSE)
+```

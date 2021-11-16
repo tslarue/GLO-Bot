@@ -1,0 +1,135 @@
+---
+title: "3-summarize_traits"
+author: "Therese LaRue"
+output: 
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+  pdf_document:
+    toc: yes
+---
+
+# **Overview**
+This file uses the clean files from 2-clean.R to generate a trait matrix. Comparing these methods to other ways to calculate traits can be found in /checking_methods/3-summarize_traits_check.Rmd. 
+
+# **Libraries**
+The following packages were loaded: `library(plyr)`, `library(tidyverse)`, `library(geometry)`, `library(plotly)`, `library(ggfortify)` (NOTE: Use R 3.5.2 or later!), `library(egg)`, and `library(corrplot)`.
+```{r Libraries, echo=TRUE, message=FALSE, warning=TRUE}
+library(plyr)
+library(tidyverse)
+library(geometry)
+```
+
+# **Import files**
+```{r Import files, echo=TRUE, message=FALSE, warning=TRUE}
+new_key <- read.csv("1-working_files/new_key.csv", header = TRUE)
+ecotype_key <- read.csv("1-working_files/ecotype_key.csv", header = TRUE)
+
+clean_traits <- read.csv("1-working_files/clean_traits.csv", header = TRUE)
+clean_true_root <- read.csv("1-working_files/clean_true_root.csv", header = TRUE)
+clean_ROIs <- read.csv("1-working_files/clean_ROIs.csv", header = TRUE)
+```
+
+# **Generate new files**
+```{r Generate files, echo=TRUE, message=FALSE, warning=TRUE}
+calculated_traits <- unique(new_key %>% 
+  select(id, barcode, experiment, 
+         rhiz_num, full_date, experiment_part, 
+         accession, ecotypeid, line, hours, day))
+
+calculated_traits$rhiz_num <- as.character(calculated_traits$rhiz_num)
+calculated_traits$id <- as.character(calculated_traits$id)
+
+ecotype_key$rhiz_num <- as.character(ecotype_key$rhiz_num)
+calculated_traits <- left_join(calculated_traits, ecotype_key[,c("rhiz_num",
+                                                                 "lat",
+                                                                 "long",
+                                                                 "swe_or_not")])
+```
+
+# **Add in traits calculated while cleaning**
+```{r Add in clean traits, echo=TRUE, message=FALSE, warning=TRUE}
+clean_traits$id <- as.character(clean_traits$id)
+calculated_traits <- left_join(calculated_traits, clean_traits[,c("id",
+                                                                  "convexhull", 
+                                                                  "xmin",
+                                                                  "xmax",
+                                                                  "colMeans.x", 
+                                                                  "colMeans.y",
+                                                                  "depth",
+                                                                  "total_length",
+                                                                  "weight_avg_angle")], by = "id")
+```
+
+# **Calculate additional traits**
+```{r Calculate traits, echo=TRUE, message=FALSE, warning=TRUE}
+calculated_traits$width <- calculated_traits$xmax-calculated_traits$xmin
+calculated_traits$depth_width <- calculated_traits$depth/calculated_traits$width
+calculated_traits$density <- calculated_traits$total_length/calculated_traits$convexhull
+```
+
+## By image
+Depth, length of that image, average angle in that image, and the number of segments in an image. 
+```{r By image, echo=TRUE, message=FALSE, warning=TRUE}
+clean_true_root$adjusted_angle <- abs(clean_true_root$angle-90)
+
+clean_true_root <- clean_true_root %>% 
+  group_by(id) %>% 
+  mutate(true_root_tip_depth = max(end_y),
+         length_perimg = sum(length),
+         weight_avg_angle_perimg = sum(adjusted_angle*length)/sum(length),
+         n_segments = length(length))
+
+clean_true_root$id <- as.character(clean_true_root$id)
+calculated_traits <- left_join(calculated_traits, unique(clean_true_root[,c("id", 
+                                                                            "true_root_tip_depth",
+                                                                            "length_perimg",
+                                                                            "weight_avg_angle_perimg",
+                                                                            "n_segments")]), by = "id")
+```
+
+## By barcode
+Total length, time, growth amount, rate percent, average growth rate (cm per hour)
+```{r By barcode, echo=TRUE, message=FALSE, warning=TRUE}
+calculated_traits <- calculated_traits %>% 
+  arrange(day) %>% 
+  group_by(barcode) %>% 
+  mutate(sum_total_length = cumsum(length_perimg),
+         diff_hours = hours-lag(hours, default = 0),
+         diff_depth = depth-lag(depth, default = 0),
+         primary_growthrate_perday = diff_depth/diff_hours,
+         primary_growthrate_avg = mean(primary_growthrate_perday, na.rm = TRUE),
+         primary_rate_percent = (diff_depth/diff_hours)/depth *100,
+         primary_rate_percent_avg = mean(primary_rate_percent, na.rm = TRUE),
+         diff_total_length = total_length-lag(total_length, default = 0),
+         total_growthrate_perday = diff_total_length/diff_hours,
+         total_growthrate_avg = mean(total_growthrate_perday, na.rm = TRUE),
+         total_rate_percent = (diff_total_length/diff_hours)/total_length*100)
+```
+
+## From ROI
+
+Confirm clean_ROI matches the computed_traits 
+```{r By ROI, echo=TRUE, message=FALSE, warning=TRUE}
+clean_ROIs$barcode <- substr(clean_ROIs$id, start = 1, stop = 9)
+clean_ROIs <- clean_ROIs %>%
+  group_by(id) %>%
+  mutate(ROI_depth = max(y),
+         ROI_xmin = min(x),
+         ROI_xmax = max(x),
+         ROI_width = ROI_xmax - ROI_xmin)
+
+clean_ROIs$id <- as.character(clean_ROIs$id)
+calculated_traits <- left_join(calculated_traits, unique(clean_ROIs[,c("id",
+                                                                       "ROI_depth",
+                                                                       "ROI_xmin",
+                                                                       "ROI_xmax",
+                                                                       "ROI_width")]), by = "id")
+```
+
+# **Save trait matrix**
+```{r save, echo=TRUE, message=FALSE, warning=FALSE}
+dir.create("3-analysis")
+write.csv(calculated_traits, "3-analysis/calculated_traits.csv")
+```
